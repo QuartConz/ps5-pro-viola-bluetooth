@@ -1,0 +1,45 @@
+Bluetooth: L2CAP: defer security block while link encryption is pending
+
+Base:     Linux 7.3 + ps5-linux-patches (linux.patch, "meower" branch)
+File:     net/bluetooth/l2cap_core.c
+License:  GPL-2.0 (same as the file it modifies)
+
+On the PS5 Pro MediaTek controller a bonded DualSense sends its HID control
+L2CAP connection request (PSM 0x11) about 0.7 s before the controller reports
+Encryption Change. Stock l2cap_connect() answers "Connection refused -
+security block" and the DualSense disconnects (reason 0x13).
+
+This change skips the immediate security block when the link is not yet
+encrypted, a link key exists (key_type != 0xff) and the feature-mask exchange
+is done, so the channel is not rejected while encryption is still being set up.
+Without it the DualSense cannot connect on this hardware (verified with the
+unmodified bluetooth.ko, see docs/test-results.md).
+
+Security: the channel is answered "pending / authentication pending"
+(BT_CONNECT2) and only reaches BT_CONFIG after the link is encrypted, for SSP
+links; for non-SSP links behaviour is unchanged. Code review against Linux 7.3,
+see docs/technical-analysis.md section 5. No negative test has been run.
+
+Origin: not original work. This is the PS5 Linux community "encryption
+pending" workaround, first published in WizGery/ps5-mediatek-fixes and later
+taken into rmuxnet/ps5-linux-patches-1. If your linux.patch already contains
+it, do not apply this patch.
+
+Apply in a kernel tree that already has linux.patch applied:
+    git apply 0002-bluetooth-l2cap-defer-security-block-while-encryption-pending.patch
+---
+--- a/net/bluetooth/l2cap_core.c
++++ b/net/bluetooth/l2cap_core.c
+@@ -4127,6 +4127,12 @@
+ 
+ 	/* Check if the ACL is secure enough (if not SDP) */
+ 	if (psm != cpu_to_le16(L2CAP_PSM_SDP) &&
++            !test_bit(HCI_CONN_ENCRYPT, &conn->hcon->flags) &&
++            conn->hcon->key_type != 0xff &&
++            (conn->info_state & L2CAP_INFO_FEAT_MASK_REQ_DONE)) {
++                BT_DBG("conn %p encryption pending, deferring psm 0x%2.2x",
++                       conn, __le16_to_cpu(psm));
++        } else if (psm != cpu_to_le16(L2CAP_PSM_SDP) &&
+ 	    (!hci_conn_check_link_mode(conn->hcon) ||
+ 	    !l2cap_check_enc_key_size(conn->hcon, pchan))) {
+ 		conn->disc_reason = HCI_ERROR_AUTH_FAILURE;
