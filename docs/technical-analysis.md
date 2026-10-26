@@ -44,7 +44,7 @@ Cross-checks:
 - Zero-length bulk OUT via usbfs on IF0 `0x02` and `0x01`: both complete → Salina bulk OUT and doorbell work in general.
 - ACL IN on `0x8d` works (7 transfers completed in the same attempt).
 
-Conclusion: device-side NAK on `0x0b` after the first transfer. With ACL routed to `0x0d` (patch `0001`): in a captured DualSense SDP/L2CAP session, usbmon recorded 20 submitted and 20 successfully completed ACL bulk OUT URBs on `0x0d` with no outstanding transfers; the xHCI enqueue/dequeue pointers of that endpoint converged. Pairing and HID work.
+Conclusion: transfers on `0x0b` stall after the first one; this is consistent with a persistent device-side NAK/stall (not proven at bus level – no USB analyzer capture). With ACL routed to `0x0d` (patch `0001`): in a captured DualSense SDP/L2CAP session, usbmon recorded 20 submitted and 20 successfully completed ACL bulk OUT URBs on `0x0d` with no outstanding transfers; the xHCI enqueue/dequeue pointers of that endpoint converged. Pairing and HID work.
 
 ## 4. USB autosuspend kills the Salina xHCI
 

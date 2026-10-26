@@ -47,11 +47,11 @@ sudo scripts/install.sh path/to/bluetooth.ko path/to/btusb.ko
 
 The script:
 
-1. checks root, presence of `0e8d:3605`, `vermagic`, that the btusb module is the patched one, and that nothing blacklists btusb/bluetooth;
-2. installs both modules to `/lib/modules/$(uname -r)/updates/`, runs `depmod` and verifies that `modprobe` now resolves to `updates/` (reverts otherwise);
+1. checks root, presence of `0e8d:3605`, `vermagic`, that the btusb module carries the `0e8d:3605` alias, that no target file already exists, and that nothing blacklists btusb/bluetooth – nothing is changed if a check fails;
+2. installs both modules to `/lib/modules/$(uname -r)/updates/`, runs `depmod` and verifies that `modprobe` now resolves to `updates/`. On any error from here on, all completed steps are undone automatically;
 3. installs the udev rule and `options btusb enable_autosuspend=0`;
 4. removes `modprobe.blacklist=btusb` from `/boot/efi/cmdline.txt` if present (backup kept; override path with `CMDLINE_TXT=`);
-5. enables `bluetooth.service` and writes `/var/lib/ps5-viola-bt/rollback.sh`.
+5. enables `bluetooth.service` (if not already enabled) and writes `/var/lib/ps5-viola-bt/rollback.sh`, which restores the recorded previous state.
 
 The stock modules under `kernel/` are not touched. **Cold boot**, then:
 
@@ -59,7 +59,7 @@ The stock modules under `kernel/` are not touched. **Cold boot**, then:
 sudo scripts/verify.sh
 ```
 
-Press only the PS button when asked. All lines should report `OK`.
+Press only the PS button when asked. Every check reports `PASS` or `FAIL`; the script ends with `OVERALL: PASS` and exit status 0 only if all checks passed (USB power must be `-1/on/active`, the paired DualSense must connect and deliver input events).
 
 ## Operating rules
 
@@ -79,15 +79,36 @@ sudo /var/lib/ps5-viola-bt/rollback.sh   # then cold boot
 - Only verified on one PS5 Pro, firmware 13.60, kernel `7.3.0-PinkSoup`, BlueZ 5.87, one DualSense.
 - First-time pairing with an empty SDP cache on a fresh install has not been re-tested separately.
 - Why encryption completes so late on this controller is not understood; `0002` is a workaround. Its security property (no unencrypted HID channel on SSP links) is established by code review for Linux 7.3, not by a negative test.
+- **`0002` is not limited to this hardware.** It changes L2CAP behaviour for every Bluetooth adapter driven by the patched `bluetooth.ko`. See [SECURITY.md](SECURITY.md).
+- Only the DualSense (HID) was tested. Bluetooth audio/SCO, LE devices and other HID devices have not been validated.
 - `0001` still carries the inert `ps5_ep_resync` parameter (default off) so that the published patch equals the tested binary. It will be removed in the next release.
 
-## Related work and credits
+## Prior community work
 
 - [ps5-linux/ps5-linux-patches](https://github.com/ps5-linux/ps5-linux-patches) – kernel base, Salina xHCI driver
 - [soniciso1/ps5-linux-loader](https://github.com/soniciso1/ps5-linux-loader) – Linux loader for the PS5 Pro
 - [WizGery/ps5-mediatek-fixes](https://github.com/WizGery/ps5-mediatek-fixes) – first published the two key ideas for MediaTek `0e8d:3603`: ACL on the second bulk OUT endpoint, and the L2CAP "encryption pending" workaround. `0002` is that community workaround; `0001` applies the endpoint idea to `0e8d:3605`.
 - [rmuxnet/ps5-linux-patches-1](https://github.com/rmuxnet/ps5-linux-patches-1) (rmuxnet, VivaLaVent) – carries the L2CAP workaround in the PS5 kernel patch set.
-- This repository (QuartConz, with AI assistance from ChatGPT and Claude): IF3 / `wIndex 3` HCI routing and WMT activation for `0e8d:3605`, endpoint `0x0d`, USB power handling, BlueZ analysis, measurements, install/verify scripts.
+
+## Development and AI-assisted research
+
+**Project maintainer: QuartConz** – hardware investigation, all experiments on the PS5 Pro, kernel builds, USB/HCI trace collection, controlled A/B tests, validation, permanent installation and release maintenance.
+
+**ChatGPT (OpenAI) – collaborative driver development and debugging**
+- MediaTek USB interface and HCI initialization analysis (IF3, `wIndex 3`, WMT activation)
+- identification, testing and validation of ACL bulk OUT endpoint `0x0d`
+- analysis of usbmon traces, xHCI transfer rings and failed transfers
+- L2CAP authentication/encryption timing analysis and integration of the existing community workaround
+- BlueZ SDP discovery diagnostics and verification of the working HID connection
+- review of module installation, reproducibility and release safety
+
+**Claude (Anthropic) – independent technical review**
+- analysis of BlueZ 5.87 service-discovery state handling (`svc_resolved` on error) and the resulting test procedure
+- code review of the L2CAP security behaviour of `0002` against Linux 7.3
+- xHCI endpoint-context comparison and evaluation of alternative hypotheses
+- install/verify scripts and release preparation
+
+AI assistance was used for analysis, code suggestions and review. All results were obtained on physical hardware and validated by the project maintainer. This is an independent community project, not endorsed by OpenAI, Anthropic or Sony Interactive Entertainment.
 
 ## License
 
