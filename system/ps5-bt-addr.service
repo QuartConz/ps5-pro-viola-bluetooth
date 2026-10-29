@@ -1,0 +1,11 @@
+[Unit]
+Description=PS5 Pro: Linux-only Bluetooth address (DualSense keeps separate PS5 and Linux slots)
+After=bluetooth.service
+Wants=bluetooth.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/ps5-bt-addr
+
+[Install]
+WantedBy=multi-user.target

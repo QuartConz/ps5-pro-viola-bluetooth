@@ -33,6 +33,22 @@ verbindung    OK
 eingaben      OK (655)
 ```
 
+## D. v1.6 on ps5-linux-patches main (2026-10-29)
+
+Software: kernel `7.2.3-Viola76` (Linux 7.2.3 + ps5-linux-patches `linux.patch` at #58 `6f18433`/`f21f65b`), `patches/main/0001` + `0002`, BlueZ (CachyOS/SteamOS base)
+
+| Check | Result |
+|---|---|
+| Boot: `PS5 Pro: ACL bulk OUT 0x0d selected`, `PS5 Pro: IF3 activated, HCI routed to IF3` | OK |
+| Pairing, connect, reconnect via PS button after cold boot | OK |
+| v1.5 without the routing reset: `btmgmt power off` + `power on` | **FAIL** – `Execution of wmt command timed out`, `Failed to send wmt patch dwnld (-110)`, adapter gone (mgmt index lost) until cold boot; power off itself: `Failed to send wmt func ctrl (-110)` |
+| v1.6 (routing reset in setup and shutdown): `btmgmt power off` + `power on` | OK – second setup `PS5 Pro: IF3 activated`, no WMT errors; unloading btusb without timeout |
+| `btmgmt public-addr` (Linux-only address `98:…` → `9A:…`) | OK – kernel programs it via `btmtk_set_bdaddr` on power on |
+| `ps5-bt-addr` service after cold boot | OK – `Controller 9A:…`, DualSense on slot 4 (PS + Square) connects; PS5 system slot 1 (PS + Triangle) still connects in the PS5 system |
+| Earlier `ps5-bt-addr` attempt that ran before bluetoothd / in the auto-off window after registration | **FAIL** (adapter dropped from the mgmt index list); fixed by running after `bluetooth.service` and waiting for a really powered adapter |
+
+DualSense firmware: update version 0630 (multi-device pairing).
+
 ## Not yet tested
 
 - First-time pairing with an empty SDP cache after a fresh install

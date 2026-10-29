@@ -1,0 +1,47 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0
+# PS5 Pro (Viola): give the internal MediaTek Bluetooth 0e8d:3605 a Linux-only
+# address (locally administered bit set in the first byte), so a DualSense with
+# multi-device pairing keeps one slot for the PS5 system and one for Linux.
+# The address only lives in the chip's RAM; the PS5 system gets its original
+# address back on the next boot. Modelled on ps5-bazzite-deck's ps5-bt-addr
+# (PR #9 by Dasloh), adapted for 0e8d:3605.
+#
+# Requires 0001 v1.6 or newer: the address change powers the adapter off and
+# on, which v1.4 does not survive.
+#
+# Runs after bluetooth.service and waits until the adapter is really powered
+# (not in the auto-off window right after registration, where a public-addr
+# change drops the mgmt index), then: stop bluetoothd -> power off ->
+# public-addr -> start bluetoothd.
+addr() { timeout 5 btmgmt --index 0 info 2>/dev/null | awk '$1=="addr"{print toupper($2);exit}'; }
+powered() { timeout 5 btmgmt --index 0 info 2>/dev/null | grep -i 'current settings' | grep -qw powered; }
+valid() { case "$1" in ??:??:??:??:??:??) [ "$1" != 00:00:00:00:00:00 ] ;; *) false ;; esac; }
+
+for i in $(seq 60); do [ -e /sys/class/bluetooth/hci0 ] && break; sleep 1; done
+[ -e /sys/class/bluetooth/hci0 ] || { echo "no hci0"; exit 0; }
+usb=$(readlink -f /sys/class/bluetooth/hci0/device/..)
+id="$(cat $usb/idVendor 2>/dev/null):$(cat $usb/idProduct 2>/dev/null)"
+[ "$id" = "0e8d:3605" ] || { echo "chip $id, nothing to do"; exit 0; }
+
+cur=""
+for i in $(seq 90); do cur=$(addr); valid "$cur" && powered && break; cur=""; sleep 1; done
+[ -n "$cur" ] || { echo "hci0 not powered or without address, nothing changed"; exit 0; }
+first=$(printf %d 0x${cur%%:*})
+[ $((first & 2)) -ne 0 ] && { echo "Linux-only address already active: $cur"; exit 0; }
+new=$(printf %02X $((first | 2)))${cur#??}
+
+systemctl stop bluetooth.service
+timeout 5 btmgmt --index 0 power off >/dev/null
+for i in $(seq 20); do powered || break; sleep 0.5; done
+if powered; then
+	echo "adapter does not power off, nothing changed"
+	systemctl start --no-block bluetooth.service
+	exit 0
+fi
+timeout 5 btmgmt --index 0 public-addr "$new"
+for i in $(seq 30); do [ "$(addr)" = "$new" ] && powered && break; sleep 0.5; done
+powered || timeout 10 btmgmt --index 0 power on >/dev/null
+echo "address $cur -> $(addr)"
+systemctl start --no-block bluetooth.service
+exit 0
