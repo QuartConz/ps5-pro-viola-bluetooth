@@ -71,12 +71,12 @@ Press only the PS button when asked. Every check reports `PASS` or `FAIL`; the s
 
 - **Do not run `bluetoothctl connect` to a DualSense that is switched off** before its HID service record is cached. In BlueZ 5.87 a failed outgoing SDP attempt (Page Timeout → `Host is down`) marks the device's services as resolved (`device_svc_resolved()` sets `svc_resolved = true` even on error). The following incoming connection then skips SDP and fails with `Could not parse HID SDP record: No such file or directory`. Recovery: fresh `bluetoothd` (cold boot), then press only the PS button. Once `[ServiceRecords]` exists in `/var/lib/bluetooth/<adapter>/cache/<device>`, this no longer matters.
 - Paired controllers reconnect via the **PS button**; they are not reachable by outgoing paging while idle.
-- With v1.4 (v0.1.0-preview), avoid anything that powers the adapter off and on (`systemctl restart bluetooth`, `bluetoothctl power off/on`): it ends in MediaTek WMT timeouts (`-110`) and a cold boot. This is fixed in v1.6.
+- With v1.4 (v0.1.0-preview), avoid anything that powers the adapter off and on (`systemctl restart bluetooth`, `bluetoothctl power off/on`). The cause was found with an unreleased v1.5 that shares the v1.4 routing code: the next power on ends in MediaTek WMT timeouts (`-110`) and the adapter is gone until a cold boot. This matches the one-off `systemctl restart bluetooth` failure seen with v1.4. Fixed in v1.6.
 - Modules in `updates/` are tied to one kernel version. Rebuild both after every kernel build.
 
 ## One DualSense for the PS5 system and Linux
 
-The PS5 system and Linux use the same chip and therefore the same Bluetooth address, so a DualSense paired in Linux replaces its PS5 pairing on that slot. `tools/ps5-bt-addr` gives Linux its own address (the locally administered bit of the first byte is set, e.g. `98:…` becomes `9A:…`; only in the chip's RAM, the PS5 system is untouched). Requires `0001` v1.6.
+The PS5 system and Linux use the same chip and therefore the same Bluetooth address, so a DualSense paired in Linux replaces its PS5 pairing on that slot. `tools/ps5-bt-addr` gives Linux its own address (the locally administered bit of the first byte is set, e.g. `98:…` becomes `9A:…`; only in the chip's RAM, the PS5 system is untouched). Requires `0001` v1.6 and `btmgmt` (BlueZ utilities).
 
 ```bash
 sudo install -m 0755 tools/ps5-bt-addr /usr/local/sbin/ps5-bt-addr
@@ -84,7 +84,7 @@ sudo install -m 0644 system/ps5-bt-addr.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now ps5-bt-addr.service
 ```
 
-DualSense controllers with multi-device pairing (controller firmware with update version 0630 or newer) keep up to four hosts, one per slot: PS + Triangle (1), Circle (2), Cross (3), Square (4). Keep the PS5 system on its slot (usually 1). For Linux, turn the controller off, hold **PS + Square** for more than 5 s until the light bar flashes twice, then pair it in Linux. Switch systems by holding the slot's button combination for about 3 s.
+DualSense controllers with multi-device pairing (tested: controller update version 0630, as shown by `dualsensectl info`) keep up to four hosts, one per slot: PS + Triangle (1), Circle (2), Cross (3), Square (4). Keep the PS5 system on its slot (slot 1 in our test). For Linux, turn the controller off, hold **PS + Square** for more than 5 s until the light bar flashes twice, then pair it in Linux. Switch systems by holding the slot's button combination for about 3 s.
 
 ## Rollback
 
