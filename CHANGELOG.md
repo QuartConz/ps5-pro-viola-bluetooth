@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## v0.2.0 – 2026-10-29
+
+- `0001` v1.6: **fix** – after power off/on (`bluetoothctl power`, `btmgmt`, address change, service restart) the adapter failed (`wmt command timed out`, `-110`) and needed a cold boot; setup and shutdown now reset the HCI routing to `wIndex 0` first. Power off no longer waits for a WMT timeout
+- `0001` v1.6: inert `ps5_ep_resync` parameter and unused includes removed, `BTUSB_NO_AUTOSUSPEND` on the device entry, `btusb_is_ps5_viola()` helper
+- new `patches/main/0001`: port for ps5-linux-patches `main` (Linux 7.2.3 incl. PS5 Pro GPU #58), hardware-tested; `main` also needs `0002`
+- new `tools/ps5-bt-addr` + `system/ps5-bt-addr.service`: Linux-only Bluetooth address, so one DualSense keeps a PS5-system slot and a Linux slot (multi-device pairing)
+- `verify.sh`: accepts the v1.6 log texts, new `wmt_errors` check
+- README: two kernel bases, power-cycle fix, DualSense slot procedure; test results section D
+
+Also in this release (previously unreleased):
 
 - `install.sh`: `set -e`, no overwriting of existing files, automatic undo of completed steps on error, rollback restores the recorded previous state (incl. previous `bluetooth.service` enablement); btusb is identified by its `0e8d:3605` alias instead of the experimental parameter
 - `verify.sh`: PASS/FAIL per check with exit status, USB power values are pass criteria, connection check bound to the paired DualSense

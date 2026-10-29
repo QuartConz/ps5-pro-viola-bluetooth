@@ -33,11 +33,15 @@ SV_UPD=$(modinfo -F srcversion "$UPD/net/bluetooth/bluetooth.ko" 2>/dev/null)
 if [ -n "$SV_RUN" ] && [ "$SV_RUN" = "$SV_UPD" ]; then res bluetooth.ko PASS "updates/ ($SV_RUN)"
 else res bluetooth.ko FAIL "loaded '$SV_RUN', updates/ '$SV_UPD'"; fi
 
-if [ "$(count 'Viola v1.4: ACL OUT 0x0d selected')" -gt 0 ]; then res btusb PASS "ACL OUT 0x0d"
+# v1.4 and v1.6 log texts
+if [ "$(count 'Viola v1.4: ACL OUT 0x0d selected|PS5 Pro: ACL bulk OUT 0x0d selected')" -gt 0 ]; then res btusb PASS "ACL OUT 0x0d"
 else res btusb FAIL "no 'ACL OUT 0x0d selected' in kernel log"; fi
 
-if [ "$(count 'Viola IF3 WMT sent')" -gt 0 ]; then res if3_wmt PASS ""
+if [ "$(count 'Viola IF3 WMT sent|PS5 Pro: IF3 activated')" -gt 0 ]; then res if3_wmt PASS ""
 else res if3_wmt FAIL "no IF3 WMT activation in kernel log"; fi
+
+if [ "$(count 'wmt command timed out|Failed to send wmt|Failed to set up firmware')" -eq 0 ]; then res wmt_errors PASS ""
+else res wmt_errors FAIL "WMT timeouts in kernel log (v1.4 after power off/on? update 0001 to v1.6)"; fi
 
 if [ -n "$dev" ]; then
     D=$(cat "$dev/power/autosuspend_delay_ms"); C=$(cat "$dev/power/control"); S=$(cat "$dev/power/runtime_status")
