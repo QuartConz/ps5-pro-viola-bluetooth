@@ -50,6 +50,25 @@ Software: kernel `7.2.3-Viola76` (Linux 7.2.3 + ps5-linux-patches `linux.patch` 
 
 DualSense firmware: update version 0630 (multi-device pairing).
 
+## E. v1.6 on Bazzite 7.3.0 (2026-10-30)
+
+Software: Bazzite (ps5-bazzite-deck) v1.8.4 on the internal M.2, v1.8.6 quick kernel `7.3.0`; `btusb.ko` = Bazzite's base + `patches/0001` v1.6, built out of tree against `/usr/lib/modules/7.3.0/build`. Same PS5 Pro (13.60), white DualSense (update version 0630).
+
+| Check | Result |
+|---|---|
+| v1.4 control build on the same base | PS5/Viola strings and module parameters identical to Bazzite's `btusb.ko` (srcversion differs, stripped vs. unstripped build) |
+| Boot with Bazzite's v1.4 | **FAIL** (both observed boots) – `Viola IF3 WMT sent; HCI routed to IF3`, then `Opcode 0x0c03 failed: -16`, no mgmt index (`No default controller available`) |
+| v1.6 loaded from that state (`modprobe -r btusb`, load v1.6) | OK – `PS5 Pro: IF3 activated`, `Powered: yes` |
+| v1.6: `bluetoothctl power off` + `power on` | OK – second setup, no WMT errors |
+| v1.6 from `updates/` after cold boot | **FAIL** – `Opcode 0x0c03 failed: -16` at ~11–17 s after boot, same as v1.4 |
+| `modprobe -r btusb && modprobe btusb` afterwards (~2 min after boot) | OK, reproducible |
+| `ps5-bt-revive` with the extra `Opcode 0x0c03 failed` pattern, two cold boots | OK – `reloading btusb`, `Bluetooth adapter back` after 7 s / 22 s, `Powered: yes` |
+| `tools/ps5-bt-addr` with Bazzite's `ps5-bt-addr.service` | OK – `98:FA:… -> 9A:FA:…` |
+| DualSense on slot 4 (PS + Square) in Bazzite, slot 1 (PS + Triangle) in the PS5 system | OK, switching both ways |
+| Unbind/bind of xHCI `0000:40:00.6` while working | **FAIL** – `PS5 Pro: IF3 WMT activation failed (-110)`, later `Failed to get device id (-110)`; cold boot needed |
+
+Second PS5 Pro (13.40), Bazzite v1.8.4/v1.8.6 with Bazzite's v1.4 only: one boot with `-16` as above, one boot with `xhci_hcd 0000:40:00.6: HC died` during re-enumeration of `5-1` (`hub failed to enable device, error -62`, `Salina poller: lock busy`). A bind after `HC died` brought the adapter back; unbind/bind from a working state failed with `Opcode 0x0c03 failed: -110` (also with a 15 s pause). Runtime PM of `40:00.6` was `control=on` and never suspended.
+
 ## Not yet tested
 
 - First-time pairing with an empty SDP cache after a fresh install

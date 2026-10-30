@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.1 – 2026-10-30
+
+- Documentation only, no patch changes
+- `0001` v1.6 tested on hardware with Bazzite's 7.3.0 kernel (meower base); notes on applying it to Bazzite's `btusb.c` (one hunk with fuzz 2)
+- new known limitation: adapter can fail right after boot with `Opcode 0x0c03 failed: -16` (v1.4 and v1.6); a btusb reload fixes it; pattern for Bazzite's `ps5-bt-revive`
+- new known limitation: xHCI unbind/bind while working needs a cold boot
+- test results section E (Bazzite) and observations from a second PS5 Pro (13.40, v1.4)
+
 ## v0.2.0 – 2026-10-29
 
 - `0001` v1.6: **fix** – after power off/on (`bluetoothctl power`, `btmgmt`, address change, service restart) the adapter failed (`wmt command timed out`, `-110`) and needed a cold boot; setup and shutdown now reset the HCI routing to `wIndex 0` first. Power off no longer waits for a WMT timeout

@@ -2,7 +2,7 @@
 
 Native Linux support for the **internal MediaTek Bluetooth controller of the PS5 Pro (Viola), USB `0e8d:3605`**. No external USB dongle required.
 
-Status: **v0.2.0**. Tested on one console and one controller, on two kernels (see [Test results](docs/test-results.md)). Not tested on other PS5 models.
+Status: **v0.2.1**. v1.6 tested on one PS5 Pro (13.60) with one DualSense on two kernels: `7.2.3-Viola76` (ps5-linux-patches main) and Bazzite's `7.3.0` (meower base). See [Test results](docs/test-results.md). Not tested on other PS5 models.
 
 > Independent community project. Not affiliated with, authorized or endorsed by Sony Interactive Entertainment. "PlayStation", "PS5" and "DualSense" are trademarks of their owners and are used only to describe the hardware. This repository contains no Sony software, firmware, keys, exploits or jailbreak components.
 
@@ -14,6 +14,7 @@ Status: **v0.2.0**. Tested on one console and one controller, on two kernels (se
 | ACL data stalls after the first packet | Bulk OUT `0x0b` completes one transfer, then NAKs forever (xHCI endpoint context identical to working endpoints) | `0001`: use bulk OUT **`0x0d`** for ACL |
 | DualSense connects, blinks, disconnects | HID control (PSM 0x11) arrives ~0.7 s before *Encryption Change*; stock L2CAP replies *security block* | `0002`: defer the security block while encryption is pending (community workaround, see credits; the channel still waits for encryption, see [analysis §5](docs/technical-analysis.md#does-0002-weaken-security-code-review-linux-73)) |
 | Adapter gone after power off/on (`wmt command timed out`, `-110`) | the MTK setup runs again on every power on; v1.4 left HCI routed to `wIndex 3`, so the WMT handshake went to the wrong interface | `0001` v1.6: setup and shutdown reset the routing to `wIndex 0` first |
+| Adapter missing right after boot (`Opcode 0x0c03 failed: -16`, no mgmt index) | HCI Reset after the IF3 activation is answered with *Command Disallowed* in the first seconds after boot; cause unknown (seen with v1.4 and v1.6) | reload btusb once after boot (works reproducibly with v1.6), e.g. via Bazzite's `ps5-bt-revive`, see [Bazzite](#bazzite-ps5-bazzite-deck) |
 | xHCI dies ("HC died") | USB runtime autosuspend of the BT device kills the Salina xHCI | udev rule: `autosuspend_delay_ms=-1`, `control=on` |
 | `Could not parse HID SDP record` | BlueZ behaviour, see below | operating rule, no patch |
 
@@ -24,7 +25,7 @@ Details and measurements: [docs/technical-analysis.md](docs/technical-analysis.m
 - PS5 Pro (Viola) running Linux via [soniciso1/ps5-linux-loader](https://github.com/soniciso1/ps5-linux-loader)
 - Kernel built from one of:
   - [ps5-linux/ps5-linux-patches](https://github.com/ps5-linux/ps5-linux-patches) `main` (Linux 7.2.3, incl. PS5 Pro GPU #58): `patches/main/0001-…` **and** `patches/0002-…` (tested on hardware)
-  - [rmuxnet/ps5-linux-patches-1](https://github.com/rmuxnet/ps5-linux-patches-1) `meower` (Linux 7.3): `patches/0001-…`; `0002` is already part of meower (v1.4 tested on hardware, v1.6 compile-tested)
+  - [rmuxnet/ps5-linux-patches-1](https://github.com/rmuxnet/ps5-linux-patches-1) `meower` (Linux 7.3): `patches/0001-…`; `0002` is already part of meower (v1.6 tested on hardware with Bazzite's 7.3.0 kernel)
 - MediaTek Bluetooth firmware for btmtk (as shipped by your distribution)
 - BlueZ (tested: 5.87), `evtest` for `verify.sh`
 
@@ -86,6 +87,20 @@ sudo systemctl daemon-reload && sudo systemctl enable --now ps5-bt-addr.service
 
 DualSense controllers with multi-device pairing (tested: controller update version 0630, as shown by `dualsensectl info`) keep up to four hosts, one per slot: PS + Triangle (1), Circle (2), Cross (3), Square (4). Keep the PS5 system on its slot (slot 1 in our test). For Linux, turn the controller off, hold **PS + Square** for more than 5 s until the light bar flashes twice, then pair it in Linux. Switch systems by holding the slot's button combination for about 3 s.
 
+## Bazzite (ps5-bazzite-deck)
+
+[VivaLaVent/ps5-bazzite-deck](https://github.com/VivaLaVent/ps5-bazzite-deck) v1.8.x ships this patch as v0.1.0-preview (btusb v1.4). Tested on a PS5 Pro (13.60) with Bazzite v1.8.4 and the v1.8.6 quick kernel (`7.3.0`):
+
+- `patches/0001` (v1.6) applies to Bazzite's `btusb.c` (Linux v7.3 + meower `linux.patch` at `baee34d` + Bazzite's `ps5-bluetooth.patch`, without its `ps5-pro-bluetooth.patch`); one hunk needs fuzz 2 because Bazzite's `0e8d:3603` endpoint block sits at the same place. The Viola block belongs directly after it.
+- `btusb.ko` can be built out of tree against `/usr/lib/modules/7.3.0/build` and placed in `/usr/lib/modules/7.3.0/updates/drivers/bluetooth/` (then `depmod 7.3.0`); load `btintel btbcm btrtl btmtk` first when using `insmod`.
+- Boot-time `-16` (see table above): Bazzite's `ps5-bt-revive` reloads btusb when the adapter hangs, but only recognises `tx timeout`. With one more pattern it handles this case too:
+
+  ```bash
+  sudo sed -i 's/grep -q "hci0: command 0x\[0-9a-f\]\* tx timeout"/grep -qE "hci0: (command 0x[0-9a-f]* tx timeout|Opcode 0x0c03 failed)"/' /usr/local/sbin/ps5-bt-revive
+  ```
+- Bazzite's `ps5-bt-addr` skips `0e8d:3605`; `tools/ps5-bt-addr` from this repository works with Bazzite's `ps5-bt-addr.service` (v1.6 required).
+- Files under `/usr/local/sbin` may be replaced by Bazzite's update scripts; check them after an update.
+
 ## Rollback
 
 ```bash
@@ -94,7 +109,9 @@ sudo /var/lib/ps5-viola-bt/rollback.sh   # then cold boot
 
 ## Known limitations
 
-- Only verified on one PS5 Pro, firmware 13.60, one DualSense: v1.4 on `7.3.0-PinkSoup` (meower), v1.6 on `7.2.3-Viola76` (ps5-linux-patches main + #58).
+- Only verified on one PS5 Pro, firmware 13.60, one DualSense: v1.4 on `7.3.0-PinkSoup` (meower), v1.6 on `7.2.3-Viola76` (ps5-linux-patches main + #58) and on Bazzite `7.3.0`. A second PS5 Pro (13.40) was only run with Bazzite's v1.4.
+- Right after boot the adapter can fail with `Opcode 0x0c03 failed: -16` (v1.4 and v1.6); a btusb reload fixes it. The cause is not known.
+- Unbinding/rebinding the Salina xHCI (`0000:40:00.6`) while the adapter was working leaves the chip in a state where setup fails with `-110` (v1.4: HCI Reset, v1.6: IF3 WMT activation); only a cold boot recovers it. Normal power off/on is not affected.
 - First-time pairing with an empty SDP cache on a fresh install has not been re-tested separately.
 - Why encryption completes so late on this controller is not understood; `0002` is a workaround. Its security property (no unencrypted HID channel on SSP links) is established by code review for Linux 7.3, not by a negative test.
 - **`0002` is not limited to this hardware.** It changes L2CAP behaviour for every Bluetooth adapter driven by the patched `bluetooth.ko`. See [SECURITY.md](SECURITY.md).
@@ -127,6 +144,7 @@ sudo /var/lib/ps5-viola-bt/rollback.sh   # then cold boot
 - xHCI endpoint-context comparison and evaluation of alternative hypotheses
 - install/verify scripts and release preparation
 - v1.6: port to ps5-linux-patches main, diagnosis and fix of the failing MTK setup after power off/on, `ps5-bt-addr` for `0e8d:3605`
+- v0.2.1: port of `0001` onto Bazzite's 7.3 base, boot-time `-16` analysis and the `ps5-bt-revive` pattern
 
 AI assistance was used for analysis, code suggestions and review. All results were obtained on physical hardware and validated by the project maintainer. This is an independent community project, not endorsed by OpenAI, Anthropic or Sony Interactive Entertainment.
 
